@@ -1,56 +1,632 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Meu Mapa</title>
+<title>Mini Mapa</title>
+
 <style>
-html,body{margin:0;width:100%;height:100%}
-#map{width:100%;height:100%}
-#localizacao{position:absolute;bottom:20px;right:20px;width:50px;height:50px;border:0;border-radius:50%;background:white;box-shadow:0 2px 8px rgba(0,0,0,.3);font-size:24px;cursor:pointer;z-index:5}
-.icone-localizacao{width:18px;height:22px;display:block;transform-origin:center center;transition:transform .15s linear;filter:drop-shadow(0 0 1px white)}
-.icone-localizacao svg{width:100%;height:100%;display:block}
+html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+}
+
+#map{
+    width:100%;
+    height:100%;
+}
+
+#localizacao,
+#seguir{
+    position:absolute;
+    left:20px;
+    width:50px;
+    height:50px;
+    border:0;
+    border-radius:50%;
+    background:white;
+    box-shadow:0 2px 8px rgba(0,0,0,.3);
+    font-size:24px;
+    cursor:pointer;
+    z-index:5;
+}
+
+#localizacao{
+    bottom:20px;
+}
+
+#seguir{
+    bottom:80px;
+}
+
+#seguir.ativo{
+    background:#4285F4;
+    color:white;
+}
+
+.icone-localizacao{
+    width:18px;
+    height:22px;
+    display:block;
+    transform-origin:center center;
+    transition:transform .15s linear;
+    filter:drop-shadow(0 0 1px white);
+}
+
+.icone-localizacao svg{
+    width:100%;
+    height:100%;
+    display:block;
+}
 </style>
 </head>
+
 <body>
+
 <div id="map"></div>
+
+<button id="seguir" onclick="alternarSeguir()">🧭</button>
+
 <button id="localizacao" onclick="irParaMinhaLocalizacao()">📍</button>
+
 <script>
-let map,marcadorLocalizacao,circuloPrecisao,ultimaPosicao,primeiraLocalizacao=true;
+
+let map,
+    marcadorLocalizacao,
+    circuloPrecisao,
+    ultimaPosicao,
+    primeiraLocalizacao=true,
+    modoSeguir=false,
+    ultimoHeading=0,
+    headingSensor=null,
+    sensorAtivo=false;
+
+
+/* =========================
+   INICIALIZAÇÃO DO MAPA
+   ========================= */
+
 function initMap(){
- map=new google.maps.Map(document.getElementById("map"),{center:{lat:-19.9167,lng:-43.9345},zoom:15,mapId:"b6df2c47d429e772296c1187"});
- iniciarLocalizacao();
+
+    map=new google.maps.Map(
+        document.getElementById("map"),
+        {
+            center:{lat:-19.9167,lng:-43.9345},
+            zoom:15,
+            mapId:"b6df2c47d429e772296c1187",
+            heading:0,
+            tilt:0
+        }
+    );
+
+    iniciarLocalizacao();
+    prepararSensorOrientacao();
+
+    map.addListener("dragstart",function(){
+
+        if(modoSeguir){
+
+            modoSeguir=false;
+            atualizarBotaoSeguir();
+
+        }
+
+    });
 }
+
+
+/* =========================
+   LOCALIZAÇÃO GPS
+   ========================= */
+
 function iniciarLocalizacao(){
- if(!navigator.geolocation){alert("Seu dispositivo não suporta localização.");return;}
- navigator.geolocation.watchPosition(function(position){
-  const pos={lat:position.coords.latitude,lng:position.coords.longitude};
-  const precisao=position.coords.accuracy;
-  const heading=position.coords.heading;
-  ultimaPosicao=pos;
-  if(!marcadorLocalizacao){
-   const icone=document.createElement("div");
-   icone.className="icone-localizacao";
-   icone.innerHTML=`<svg viewBox="0 0 24 28" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 C12 2 3.5 10.2 3.5 16.2 C3.5 21.1 7.3 25 12 25 C16.7 25 20.5 21.1 20.5 16.2 C20.5 10.2 12 2 12 2 Z" fill="white" stroke="black" stroke-width="2" stroke-linejoin="round"/></svg>`;
-   marcadorLocalizacao=new google.maps.marker.AdvancedMarkerElement({map:map,position:pos,content:icone,title:"Minha localização"});
-   marcadorLocalizacao._icone=icone;
-  }else{marcadorLocalizacao.position=pos;}
-  if(typeof heading==="number"&&heading>=0&&marcadorLocalizacao._icone){
-   marcadorLocalizacao._icone.style.transform="rotate("+heading+"deg)";
-  }
-  if(!circuloPrecisao){
-   circuloPrecisao=new google.maps.Circle({map:map,center:pos,radius:precisao,fillColor:"#4285F4",fillOpacity:.15,strokeColor:"#4285F4",strokeOpacity:.4,strokeWeight:1});
-  }else{circuloPrecisao.setCenter(pos);circuloPrecisao.setRadius(precisao);}
-  if(primeiraLocalizacao){map.setCenter(pos);map.setZoom(17);primeiraLocalizacao=false;}
- },function(erro){
-  if(erro.code===erro.PERMISSION_DENIED)alert("Permissão de localização foi negada.");
-  else if(erro.code===erro.POSITION_UNAVAILABLE)alert("Não foi possível obter sua localização.");
-  else if(erro.code===erro.TIMEOUT)alert("Tempo esgotado ao tentar obter sua localização.");
-  else alert("Erro desconhecido ao obter localização.");
- },{enableHighAccuracy:true,maximumAge:1000,timeout:10000});
+
+    if(!navigator.geolocation){
+
+        alert("Seu dispositivo não suporta localização.");
+        return;
+
+    }
+
+    navigator.geolocation.watchPosition(
+
+        function(position){
+
+            const pos={
+                lat:position.coords.latitude,
+                lng:position.coords.longitude
+            };
+
+            const precisao=position.coords.accuracy;
+            const headingGPS=position.coords.heading;
+
+            ultimaPosicao=pos;
+
+
+            /* =========================
+               CRIA / ATUALIZA MARCADOR
+               ========================= */
+
+            if(!marcadorLocalizacao){
+
+                const icone=document.createElement("div");
+
+                icone.className="icone-localizacao";
+
+                icone.innerHTML=`
+                <svg viewBox="0 0 24 28"
+                     xmlns="http://www.w3.org/2000/svg">
+
+                    <path
+                        d="M12 2 C12 2 3.5 10.2 3.5 16.2
+                        C3.5 21.1 7.3 25 12 25
+                        C16.7 25 20.5 21.1 20.5 16.2
+                        C20.5 10.2 12 2 12 2 Z"
+                        fill="white"
+                        stroke="black"
+                        stroke-width="2"
+                        stroke-linejoin="round"
+                    />
+
+                </svg>`;
+
+                marcadorLocalizacao=
+                    new google.maps.marker.AdvancedMarkerElement({
+
+                        map:map,
+                        position:pos,
+                        content:icone,
+                        title:"Minha localização"
+
+                    });
+
+                marcadorLocalizacao._icone=icone;
+
+            }else{
+
+                marcadorLocalizacao.position=pos;
+
+            }
+
+
+            /* =========================
+               ESCOLHE A MELHOR DIREÇÃO
+               ========================= */
+
+            let direcao=null;
+
+
+            /*
+             * Se o sensor do celular estiver
+             * fornecendo uma direção válida,
+             * ele terá prioridade.
+             */
+
+            if(sensorAtivo &&
+               headingSensor!==null){
+
+                direcao=headingSensor;
+
+            }
+
+            /*
+             * Caso o sensor ainda não esteja
+             * disponível, usamos o heading do GPS.
+             */
+
+            else if(
+                typeof headingGPS==="number" &&
+                headingGPS>=0
+            ){
+
+                direcao=headingGPS;
+
+            }
+
+
+            /* =========================
+               ATUALIZA ÍCONE E MAPA
+               ========================= */
+
+            if(direcao!==null){
+
+                ultimoHeading=direcao;
+
+                if(marcadorLocalizacao._icone){
+
+                    marcadorLocalizacao._icone.style.transform=
+                        "rotate("+direcao+"deg)";
+
+                }
+
+                if(modoSeguir){
+
+                    map.setHeading(direcao);
+
+                }
+
+            }
+
+
+            /* =========================
+               CÍRCULO DE PRECISÃO
+               ========================= */
+
+            if(!circuloPrecisao){
+
+                circuloPrecisao=
+                    new google.maps.Circle({
+
+                        map:map,
+                        center:pos,
+                        radius:precisao,
+
+                        fillColor:"#4285F4",
+                        fillOpacity:.15,
+
+                        strokeColor:"#4285F4",
+                        strokeOpacity:.4,
+                        strokeWeight:1
+
+                    });
+
+            }else{
+
+                circuloPrecisao.setCenter(pos);
+                circuloPrecisao.setRadius(precisao);
+
+            }
+
+
+            /* =========================
+               PRIMEIRA LOCALIZAÇÃO
+               ========================= */
+
+            if(primeiraLocalizacao){
+
+                map.setCenter(pos);
+                map.setZoom(17);
+
+                primeiraLocalizacao=false;
+
+            }
+
+
+            /* =========================
+               MODO SEGUIR
+               ========================= */
+
+            if(modoSeguir){
+
+                map.setCenter(pos);
+
+            }
+
+        },
+
+        function(erro){
+
+            if(erro.code===erro.PERMISSION_DENIED){
+
+                alert("Permissão de localização foi negada.");
+
+            }else if(erro.code===erro.POSITION_UNAVAILABLE){
+
+                alert("Não foi possível obter sua localização.");
+
+            }else if(erro.code===erro.TIMEOUT){
+
+                alert("Tempo esgotado ao tentar obter localização.");
+
+            }else{
+
+                alert("Erro desconhecido ao obter localização.");
+
+            }
+
+        },
+
+        {
+            enableHighAccuracy:true,
+            maximumAge:1000,
+            timeout:10000
+        }
+
+    );
 }
-function irParaMinhaLocalizacao(){if(!ultimaPosicao){alert("Aguardando sua localização...");return;}map.setCenter(ultimaPosicao);map.setZoom(17);}
+
+
+/* =========================
+   SENSOR DE ORIENTAÇÃO
+   ========================= */
+
+function prepararSensorOrientacao(){
+
+    if(!window.DeviceOrientationEvent){
+
+        console.log("Sensor de orientação não disponível.");
+        return;
+
+    }
+
+
+    /*
+     * Alguns dispositivos/navegadores exigem
+     * uma permissão explícita para acessar
+     * os sensores.
+     */
+
+    document.getElementById("seguir").addEventListener(
+        "click",
+        solicitarPermissaoSensor,
+        {once:true}
+    );
+
+}
+
+
+function solicitarPermissaoSensor(){
+
+    if(
+        typeof DeviceOrientationEvent.requestPermission ===
+        "function"
+    ){
+
+        DeviceOrientationEvent.requestPermission()
+
+        .then(function(permission){
+
+            if(permission==="granted"){
+
+                iniciarSensorOrientacao();
+
+            }
+
+        })
+
+        .catch(function(erro){
+
+            console.log(
+                "Permissão do sensor recusada:",
+                erro
+            );
+
+        });
+
+    }else{
+
+        iniciarSensorOrientacao();
+
+    }
+
+}
+
+
+/* =========================
+   LEITURA DO SENSOR
+   ========================= */
+
+function iniciarSensorOrientacao(){
+
+    if(sensorAtivo)
+        return;
+
+    sensorAtivo=true;
+
+    window.addEventListener(
+        "deviceorientationabsolute",
+        receberOrientacao,
+        true
+    );
+
+    /*
+     * Alguns aparelhos não disparam
+     * deviceorientationabsolute.
+     * Usamos deviceorientation como
+     * fallback.
+     */
+
+    window.addEventListener(
+        "deviceorientation",
+        receberOrientacao,
+        true
+    );
+
+}
+
+
+/* =========================
+   CALCULA DIREÇÃO DO CELULAR
+   ========================= */
+
+function receberOrientacao(event){
+
+    let alpha=event.alpha;
+
+    if(alpha===null || alpha===undefined)
+        return;
+
+
+    /*
+     * Em dispositivos que fornecem
+     * orientação absoluta, alpha representa
+     * a orientação em relação ao norte.
+     */
+
+    let direcao=360-alpha;
+
+
+    /*
+     * Corrige a rotação conforme a orientação
+     * atual da tela.
+     */
+
+    const orientacaoTela=
+        window.screen.orientation
+        ? window.screen.orientation.angle
+        : 0;
+
+    direcao+=orientacaoTela;
+
+
+    /*
+     * Mantém o valor entre 0 e 360 graus.
+     */
+
+    direcao=
+        ((direcao%360)+360)%360;
+
+
+    /*
+     * Suaviza pequenas oscilações do sensor.
+     */
+
+    if(headingSensor===null){
+
+        headingSensor=direcao;
+
+    }else{
+
+        let diferenca=direcao-headingSensor;
+
+        if(diferenca>180)
+            diferenca-=360;
+
+        if(diferenca<-180)
+            diferenca+=360;
+
+        headingSensor=
+            headingSensor+(diferenca*0.15);
+
+        headingSensor=
+            ((headingSensor%360)+360)%360;
+
+    }
+
+
+    /*
+     * Atualiza o ícone.
+     */
+
+    if(marcadorLocalizacao &&
+       marcadorLocalizacao._icone){
+
+        marcadorLocalizacao._icone.style.transform=
+            "rotate("+headingSensor+"deg)";
+
+    }
+
+
+    /*
+     * Se o modo seguir estiver ativo,
+     * o mapa também acompanha a direção.
+     */
+
+    if(modoSeguir && map){
+
+        map.setHeading(headingSensor);
+
+    }
+
+}
+
+
+/* =========================
+   BOTÃO SEGUIR
+   ========================= */
+
+function alternarSeguir(){
+
+    if(!ultimaPosicao){
+
+        alert("Aguardando sua localização...");
+        return;
+
+    }
+
+
+    /*
+     * Solicita acesso aos sensores.
+     */
+
+    solicitarPermissaoSensor();
+
+
+    modoSeguir=!modoSeguir;
+
+    atualizarBotaoSeguir();
+
+
+    if(modoSeguir){
+
+        map.setCenter(ultimaPosicao);
+        map.setZoom(17);
+
+        if(headingSensor!==null){
+
+            map.setHeading(headingSensor);
+
+        }else{
+
+            map.setHeading(ultimoHeading);
+
+        }
+
+    }
+
+}
+
+
+/* =========================
+   VISUAL DO BOTÃO
+   ========================= */
+
+function atualizarBotaoSeguir(){
+
+    const botao=
+        document.getElementById("seguir");
+
+    if(modoSeguir){
+
+        botao.classList.add("ativo");
+
+    }else{
+
+        botao.classList.remove("ativo");
+
+    }
+
+}
+
+
+/* =========================
+   BOTÃO LOCALIZAÇÃO
+   ========================= */
+
+function irParaMinhaLocalizacao(){
+
+    if(!ultimaPosicao){
+
+        alert("Aguardando sua localização...");
+        return;
+
+    }
+
+    map.setCenter(ultimaPosicao);
+    map.setZoom(17);
+
+}
+
 </script>
-<script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBy8yfbGaDl79mlrZTGoCDdpby4R3u1uMQ&libraries=marker&callback=initMap"></script>
+
+
+<script
+async
+src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBy8yfbGaDl79mlrZTGoCDdpby4R3u1uMQ&libraries=marker&callback=initMap">
+</script>
+
 </body>
 </html>
+```
