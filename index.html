@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mini Mapa</title>
+<title>Meu Mapa</title>
 
 <style>
 html,body{
@@ -31,6 +30,7 @@ html,body{
     font-size:24px;
     cursor:pointer;
     z-index:5;
+    transition:.2s;
 }
 
 #localizacao{
@@ -44,6 +44,13 @@ html,body{
 #seguir.ativo{
     background:#4285F4;
     color:white;
+}
+
+/* Botão desabilitado */
+#localizacao:disabled,
+#seguir:disabled{
+    opacity:.45;
+    cursor:default;
 }
 
 .icone-localizacao{
@@ -85,6 +92,14 @@ let map,
 
 
 /* =========================
+   CONFIGURAÇÃO DO SENSOR
+   ========================= */
+
+const LIMITE_MOVIMENTO=4;
+const SUAVIZACAO=0.08;
+
+
+/* =========================
    INICIALIZAÇÃO DO MAPA
    ========================= */
 
@@ -109,7 +124,14 @@ function initMap(){
         if(modoSeguir){
 
             modoSeguir=false;
+
             atualizarBotaoSeguir();
+
+            /*
+             * Volta a visão de cima
+             * quando o usuário arrasta o mapa.
+             */
+            map.setTilt(0);
 
         }
 
@@ -199,21 +221,21 @@ function iniciarLocalizacao(){
 
 
             /*
-             * Se o sensor do celular estiver
-             * fornecendo uma direção válida,
-             * ele terá prioridade.
+             * Sensor tem prioridade.
              */
 
-            if(sensorAtivo &&
-               headingSensor!==null){
+            if(
+                sensorAtivo &&
+                headingSensor!==null
+            ){
 
                 direcao=headingSensor;
 
             }
 
+
             /*
-             * Caso o sensor ainda não esteja
-             * disponível, usamos o heading do GPS.
+             * GPS como fallback.
              */
 
             else if(
@@ -351,21 +373,12 @@ function prepararSensorOrientacao(){
 
     }
 
-
-    /*
-     * Alguns dispositivos/navegadores exigem
-     * uma permissão explícita para acessar
-     * os sensores.
-     */
-
-    document.getElementById("seguir").addEventListener(
-        "click",
-        solicitarPermissaoSensor,
-        {once:true}
-    );
-
 }
 
+
+/* =========================
+   SOLICITA PERMISSÃO
+   ========================= */
 
 function solicitarPermissaoSensor(){
 
@@ -405,7 +418,7 @@ function solicitarPermissaoSensor(){
 
 
 /* =========================
-   LEITURA DO SENSOR
+   INICIA SENSOR
    ========================= */
 
 function iniciarSensorOrientacao(){
@@ -415,21 +428,13 @@ function iniciarSensorOrientacao(){
 
     sensorAtivo=true;
 
-    window.addEventListener(
-        "deviceorientationabsolute",
-        receberOrientacao,
-        true
-    );
 
     /*
-     * Alguns aparelhos não disparam
-     * deviceorientationabsolute.
-     * Usamos deviceorientation como
-     * fallback.
+     * Primeiro tenta usar orientação absoluta.
      */
 
     window.addEventListener(
-        "deviceorientation",
+        "deviceorientationabsolute",
         receberOrientacao,
         true
     );
@@ -438,7 +443,7 @@ function iniciarSensorOrientacao(){
 
 
 /* =========================
-   CALCULA DIREÇÃO DO CELULAR
+   CALCULA DIREÇÃO
    ========================= */
 
 function receberOrientacao(event){
@@ -450,17 +455,14 @@ function receberOrientacao(event){
 
 
     /*
-     * Em dispositivos que fornecem
-     * orientação absoluta, alpha representa
-     * a orientação em relação ao norte.
+     * Converte alpha para direção.
      */
 
     let direcao=360-alpha;
 
 
     /*
-     * Corrige a rotação conforme a orientação
-     * atual da tela.
+     * Corrige pela orientação da tela.
      */
 
     const orientacaoTela=
@@ -472,16 +474,16 @@ function receberOrientacao(event){
 
 
     /*
-     * Mantém o valor entre 0 e 360 graus.
+     * Mantém entre 0 e 360.
      */
 
     direcao=
         ((direcao%360)+360)%360;
 
 
-    /*
-     * Suaviza pequenas oscilações do sensor.
-     */
+    /* =========================
+       FILTRO DE ESTABILIDADE
+       ========================= */
 
     if(headingSensor===null){
 
@@ -491,14 +493,38 @@ function receberOrientacao(event){
 
         let diferenca=direcao-headingSensor;
 
+
+        /*
+         * Corrige a passagem 359° → 0°.
+         */
+
         if(diferenca>180)
             diferenca-=360;
 
         if(diferenca<-180)
             diferenca+=360;
 
+
+        /*
+         * Ignora pequenas oscilações
+         * do sensor.
+         */
+
+        if(Math.abs(diferenca)<LIMITE_MOVIMENTO){
+
+            return;
+
+        }
+
+
+        /*
+         * Suaviza movimentos reais.
+         */
+
         headingSensor=
-            headingSensor+(diferenca*0.15);
+            headingSensor+
+            (diferenca*SUAVIZACAO);
+
 
         headingSensor=
             ((headingSensor%360)+360)%360;
@@ -506,12 +532,14 @@ function receberOrientacao(event){
     }
 
 
-    /*
-     * Atualiza o ícone.
-     */
+    /* =========================
+       ATUALIZA ÍCONE
+       ========================= */
 
-    if(marcadorLocalizacao &&
-       marcadorLocalizacao._icone){
+    if(
+        marcadorLocalizacao &&
+        marcadorLocalizacao._icone
+    ){
 
         marcadorLocalizacao._icone.style.transform=
             "rotate("+headingSensor+"deg)";
@@ -519,10 +547,9 @@ function receberOrientacao(event){
     }
 
 
-    /*
-     * Se o modo seguir estiver ativo,
-     * o mapa também acompanha a direção.
-     */
+    /* =========================
+       ATUALIZA MAPA
+       ========================= */
 
     if(modoSeguir && map){
 
@@ -548,31 +575,84 @@ function alternarSeguir(){
 
 
     /*
-     * Solicita acesso aos sensores.
+     * Se já estiver seguindo,
+     * desativa o modo.
+     */
+
+    if(modoSeguir){
+
+        modoSeguir=false;
+
+        atualizarBotaoSeguir();
+
+        /*
+         * Volta a visão de cima.
+         */
+
+        map.setTilt(0);
+
+        /*
+         * Reativa botão de localização.
+         */
+
+        document.getElementById(
+            "localizacao"
+        ).disabled=false;
+
+        return;
+
+    }
+
+
+    /*
+     * Solicita acesso ao sensor.
      */
 
     solicitarPermissaoSensor();
 
 
-    modoSeguir=!modoSeguir;
+    modoSeguir=true;
+
 
     atualizarBotaoSeguir();
 
 
-    if(modoSeguir){
+    /*
+     * Desabilita o botão de localização
+     * enquanto o modo seguir estiver ativo.
+     */
 
-        map.setCenter(ultimaPosicao);
-        map.setZoom(17);
+    document.getElementById(
+        "localizacao"
+    ).disabled=true;
 
-        if(headingSensor!==null){
 
-            map.setHeading(headingSensor);
+    /*
+     * Centraliza no usuário.
+     */
 
-        }else{
+    map.setCenter(ultimaPosicao);
+    map.setZoom(17);
 
-            map.setHeading(ultimoHeading);
 
-        }
+    /*
+     * Inclina o mapa.
+     */
+
+    map.setTilt(45);
+
+
+    /*
+     * Usa a direção disponível.
+     */
+
+    if(headingSensor!==null){
+
+        map.setHeading(headingSensor);
+
+    }else{
+
+        map.setHeading(ultimoHeading);
 
     }
 
@@ -580,7 +660,7 @@ function alternarSeguir(){
 
 
 /* =========================
-   VISUAL DO BOTÃO
+   VISUAL DO BOTÃO SEGUIR
    ========================= */
 
 function atualizarBotaoSeguir(){
@@ -614,6 +694,37 @@ function irParaMinhaLocalizacao(){
 
     }
 
+
+    /*
+     * Se o modo seguir estiver ativo,
+     * encerra o modo seguir.
+     */
+
+    if(modoSeguir){
+
+        modoSeguir=false;
+
+        atualizarBotaoSeguir();
+
+        map.setTilt(0);
+
+    }
+
+
+    /*
+     * Garante que o botão seguir
+     * fique disponível novamente.
+     */
+
+    document.getElementById(
+        "seguir"
+    ).disabled=false;
+
+
+    /*
+     * Centraliza na localização.
+     */
+
     map.setCenter(ultimaPosicao);
     map.setZoom(17);
 
@@ -629,4 +740,3 @@ src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBy8yfbGaDl79mlrZTGoCDdpby
 
 </body>
 </html>
-```
