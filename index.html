@@ -8,6 +8,13 @@
 html,body{margin:0;width:100%;height:100%}
 #map{width:100%;height:100%}
 #localizacao{position:absolute;bottom:20px;right:20px;width:50px;height:50px;border:0;border-radius:50%;background:white;box-shadow:0 2px 8px rgba(0,0,0,.3);font-size:24px;cursor:pointer;z-index:5}
+
+        .seta-localizacao {
+            width: 18px; height: 18px; display: flex; align-items: center; justify-content: center;
+            font-size: 18px; line-height: 18px; color: #1a73e8;
+            text-shadow: 0 0 2px #fff, 0 0 2px #fff; transform-origin: center center;
+            transition: transform 0.15s linear;
+        }
 </style>
 </head>
 <body>
@@ -37,12 +44,27 @@ function iniciarLocalizacao(){
             const precisao=position.coords.accuracy;
             ultimaPosicao=pos;
 
+            const heading = position.coords.heading;
+
             if(!marcadorLocalizacao){
-                marcadorLocalizacao=new google.maps.marker.AdvancedMarkerElement({
-                    map:map,position:pos,title:"Minha localização"
+                const seta = document.createElement("div");
+                seta.className = "seta-localizacao";
+                seta.innerHTML = "➤";
+
+                marcadorLocalizacao = new google.maps.marker.AdvancedMarkerElement({
+                    map: map,
+                    position: pos,
+                    content: seta,
+                    title: "Minha localização"
                 });
+
+                marcadorLocalizacao._seta = seta;
             }else{
-                marcadorLocalizacao.position=pos;
+                marcadorLocalizacao.position = pos;
+            }
+
+            if (typeof heading === "number" && heading >= 0 && marcadorLocalizacao._seta) {
+                marcadorLocalizacao._seta.style.transform = "rotate(" + heading + "deg)";
             }
 
             if(!circuloPrecisao){
