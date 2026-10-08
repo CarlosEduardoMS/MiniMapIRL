@@ -24,7 +24,6 @@ html,body{
     height:100%;
 }
 
-/* CAMADA DOS BOTÕES */
 #botoes-mapa{
     position:absolute;
     left:0;
@@ -34,8 +33,6 @@ html,body{
     pointer-events:none;
     z-index:99999;
 }
-
-/* BOTÕES */
 
 #localizacao,
 #seguir{
@@ -73,8 +70,6 @@ html,body{
     cursor:default;
 }
 
-/* ÍCONE DA LOCALIZAÇÃO */
-
 .icone-localizacao{
     width:18px;
     height:22px;
@@ -109,7 +104,6 @@ html,body{
 
 </div>
 
-
 <script>
 
 let map,
@@ -121,8 +115,6 @@ let map,
     headingSensor=null,
     sensorAtivo=false;
 
-
-/* INICIA O MAPA */
 
 function initMap(){
 
@@ -140,7 +132,11 @@ function initMap(){
 
             heading:0,
 
-            tilt:0
+            tilt:0,
+
+            /* REMOVER CONTROLES */
+            mapTypeControl:false,
+            streetViewControl:false
         }
     );
 
@@ -149,8 +145,6 @@ function initMap(){
 
     prepararSensorOrientacao();
 
-
-    /* ARRASTAR O MAPA */
 
     map.addListener("dragstart",function(){
 
@@ -170,8 +164,6 @@ function initMap(){
 }
 
 
-/* LOCALIZAÇÃO */
-
 function iniciarLocalizacao(){
 
     if(!navigator.geolocation){
@@ -187,11 +179,8 @@ function iniciarLocalizacao(){
         function(position){
 
             const pos={
-
                 lat:position.coords.latitude,
-
                 lng:position.coords.longitude
-
             };
 
 
@@ -200,8 +189,6 @@ function iniciarLocalizacao(){
 
             ultimaPosicao=pos;
 
-
-            /* CRIA O MARCADOR */
 
             if(!marcadorLocalizacao){
 
@@ -260,15 +247,12 @@ function iniciarLocalizacao(){
             }
 
 
-            /* DIREÇÃO */
-
             let direcao=null;
 
 
             if(sensorAtivo && headingSensor!==null){
 
                 direcao=headingSensor;
-
 
             }else if(
                 typeof headingGPS==="number" &&
@@ -302,8 +286,6 @@ function iniciarLocalizacao(){
             }
 
 
-            /* PRIMEIRA LOCALIZAÇÃO */
-
             if(primeiraLocalizacao){
 
                 map.setCenter(pos);
@@ -314,8 +296,6 @@ function iniciarLocalizacao(){
 
             }
 
-
-            /* MODO SEGUIR */
 
             if(modoSeguir){
 
@@ -362,21 +342,15 @@ function iniciarLocalizacao(){
 
 
         {
-
             enableHighAccuracy:true,
-
             maximumAge:1000,
-
             timeout:10000
-
         }
 
     );
 
 }
 
-
-/* PREPARA SENSOR */
 
 function prepararSensorOrientacao(){
 
@@ -392,8 +366,6 @@ function prepararSensorOrientacao(){
 
 }
 
-
-/* PERMISSÃO DO SENSOR */
 
 function solicitarPermissaoSensor(){
 
@@ -432,8 +404,6 @@ function solicitarPermissaoSensor(){
 }
 
 
-/* INICIA SENSOR */
-
 function iniciarSensorOrientacao(){
 
     if(sensorAtivo)
@@ -452,8 +422,6 @@ function iniciarSensorOrientacao(){
 
 }
 
-
-/* RECEBE ORIENTAÇÃO */
 
 function receberOrientacao(event){
 
@@ -483,8 +451,6 @@ function receberOrientacao(event){
     direcao=
         ((direcao%360)+360)%360;
 
-
-    /* FILTRO DO SENSOR */
 
     const diferencaMinima=2;
 
@@ -531,8 +497,6 @@ function receberOrientacao(event){
     }
 
 
-    /* ROTACIONA ÍCONE */
-
     if(
         marcadorLocalizacao &&
         marcadorLocalizacao._icone
@@ -543,8 +507,6 @@ function receberOrientacao(event){
 
     }
 
-
-    /* ROTACIONA MAPA */
 
     if(
         modoSeguir &&
@@ -558,8 +520,6 @@ function receberOrientacao(event){
 }
 
 
-/* MODO SEGUIR */
-
 function alternarSeguir(){
 
     if(!ultimaPosicao){
@@ -572,8 +532,6 @@ function alternarSeguir(){
 
     }
 
-
-    /* DESATIVA */
 
     if(modoSeguir){
 
@@ -591,8 +549,6 @@ function alternarSeguir(){
 
     }
 
-
-    /* SOLICITA SENSOR */
 
     solicitarPermissaoSensor();
 
@@ -616,8 +572,6 @@ function alternarSeguir(){
     map.setZoom(17);
 
 
-    /* INCLINAÇÃO */
-
     map.setTilt(55);
 
 
@@ -638,8 +592,6 @@ function alternarSeguir(){
 }
 
 
-/* ATUALIZA BOTÃO SEGUIR */
-
 function atualizarBotaoSeguir(){
 
     const botao=
@@ -658,8 +610,6 @@ function atualizarBotaoSeguir(){
 
 }
 
-
-/* BOTÃO LOCALIZAÇÃO */
 
 function irParaMinhaLocalizacao(){
 
