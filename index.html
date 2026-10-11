@@ -113,9 +113,7 @@ let map,
     modoSeguir=false,
     ultimoHeading=0,
     headingSensor=null,
-    sensorAtivo=false,
-    ultimoHeadingMapa=null,
-    ultimoUpdateMapa=0;
+    sensorAtivo=false;
 
 
 function initMap(){
@@ -272,17 +270,13 @@ function iniciarLocalizacao(){
 
 
                 if(marcadorLocalizacao._icone){
-
-                    marcadorLocalizacao._icone.style.transform=
-                        "rotate("+direcao+"deg)";
-
+                    marcadorLocalizacao._icone.style.transform = modoSeguir
+                        ? "rotate(0deg)"
+                        : "rotate("+direcao+"deg)";
                 }
 
-
                 if(modoSeguir){
-
                     map.setHeading(direcao);
-
                 }
 
             }
@@ -416,14 +410,13 @@ function iniciarSensorOrientacao(){
     sensorAtivo=true;
 
 
-    // Use absolute orientation when available; fall back to the regular event.
+    // Prefer the absolute compass event; use the regular event only as a fallback.
+    const eventoOrientacao = ("ondeviceorientationabsolute" in window)
+        ? "deviceorientationabsolute"
+        : "deviceorientation";
+
     window.addEventListener(
-        "deviceorientationabsolute",
-        receberOrientacao,
-        true
-    );
-    window.addEventListener(
-        "deviceorientation",
+        eventoOrientacao,
         receberOrientacao,
         true
     );
@@ -433,41 +426,87 @@ function iniciarSensorOrientacao(){
 
 function receberOrientacao(event){
 
-    if(event.alpha===null || event.alpha===undefined) return;
+    let direcao;
 
-    // Ignore non-absolute readings when absolute sensor is supported and this event isn't absolute.
-    if(event.type==="deviceorientation" && ("ondeviceorientationabsolute" in window)) return;
-
-    let direcao=360-event.alpha;
-    const orientacaoTela=window.screen.orientation
-        ? window.screen.orientation.angle
-        : 0;
-    direcao=((direcao+orientacaoTela)%360+360)%360;
-
-    // Circular low-pass filter: avoids jumps when crossing 0/360 degrees.
-    if(headingSensor===null){
-        headingSensor=direcao;
+    // Some browsers (notably iOS Safari) expose a direct compass heading.
+    if(typeof event.webkitCompassHeading === "number"){
+        direcao = event.webkitCompassHeading;
     }else{
-        const radAtual=headingSensor*Math.PI/180;
-        const radNovo=direcao*Math.PI/180;
-        const x=Math.cos(radAtual)*0.85+Math.cos(radNovo)*0.15;
-        const y=Math.sin(radAtual)*0.85+Math.sin(radNovo)*0.15;
-        headingSensor=(Math.atan2(y,x)*180/Math.PI+360)%360;
+        if(event.alpha===null || event.alpha===undefined) return;
+        direcao = 360 - event.alpha;
     }
+
+
+    if(typeof event.webkitCompassHeading !== "number"){
+        const orientacaoTela =
+            window.screen.orientation
+                ? window.screen.orientation.angle
+                : 0;
+        direcao += orientacaoTela;
+    }
+
+    direcao = ((direcao % 360) + 360) % 360;
+
+
+    const diferencaMinima=2;
+
+    const respostaSensor=0.25;
+
+
+    if(headingSensor===null){
+
+        headingSensor=direcao;
+
+    }else{
+
+        let diferenca=
+            direcao-headingSensor;
+
+
+        if(diferenca>180)
+
+            diferenca-=360;
+
+
+        if(diferenca<-180)
+
+            diferenca+=360;
+
+
+        if(
+            Math.abs(diferenca)<
+            diferencaMinima
+        ){
+
+            return;
+
+        }
+
+
+        headingSensor +=
+            diferenca*respostaSensor;
+
+
+        headingSensor=
+            ((headingSensor%360)+360)%360;
+
+    }
+
 
     if(marcadorLocalizacao && marcadorLocalizacao._icone){
-        marcadorLocalizacao._icone.style.transform="rotate("+headingSensor+"deg)";
+        marcadorLocalizacao._icone.style.transform = modoSeguir
+            ? "rotate(0deg)"
+            : "rotate("+headingSensor+"deg)";
     }
 
-    // Update map heading at most 8 times per second and only for meaningful changes.
-    if(modoSeguir && map){
-        const agora=Date.now();
-        let delta=ultimoHeadingMapa===null ? 999 : Math.abs(((headingSensor-ultimoHeadingMapa+540)%360)-180);
-        if(agora-ultimoUpdateMapa>=125 && delta>=2){
-            map.setHeading(headingSensor);
-            ultimoHeadingMapa=headingSensor;
-            ultimoUpdateMapa=agora;
-        }
+
+    if(
+        modoSeguir &&
+        map
+    ){
+
+        map.setHeading(headingSensor);
+
     }
 
 }
@@ -490,6 +529,10 @@ function alternarSeguir(){
 
         modoSeguir=false;
 
+        if(marcadorLocalizacao && marcadorLocalizacao._icone){
+            marcadorLocalizacao._icone.style.transform = "rotate("+ultimoHeading+"deg)";
+        }
+
         atualizarBotaoSeguir();
 
         map.setTilt(0);
@@ -505,10 +548,12 @@ function alternarSeguir(){
 
     solicitarPermissaoSensor();
 
-    ultimoHeadingMapa=null;
-    ultimoUpdateMapa=0;
+
     modoSeguir=true;
 
+    if(marcadorLocalizacao && marcadorLocalizacao._icone){
+        marcadorLocalizacao._icone.style.transform = "rotate(0deg)";
+    }
 
     atualizarBotaoSeguir();
 
