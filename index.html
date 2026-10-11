@@ -113,7 +113,9 @@ let map,
     modoSeguir=false,
     ultimoHeading=0,
     headingSensor=null,
-    sensorAtivo=false;
+    sensorAtivo=false,
+    ultimoHeadingMapa=null,
+    ultimoUpdateMapa=0;
 
 
 function initMap(){
@@ -414,8 +416,14 @@ function iniciarSensorOrientacao(){
     sensorAtivo=true;
 
 
+    // Use absolute orientation when available; fall back to the regular event.
     window.addEventListener(
         "deviceorientationabsolute",
+        receberOrientacao,
+        true
+    );
+    window.addEventListener(
+        "deviceorientation",
         receberOrientacao,
         true
     );
@@ -425,96 +433,41 @@ function iniciarSensorOrientacao(){
 
 function receberOrientacao(event){
 
-    let alpha=event.alpha;
+    if(event.alpha===null || event.alpha===undefined) return;
 
+    // Ignore non-absolute readings when absolute sensor is supported and this event isn't absolute.
+    if(event.type==="deviceorientation" && ("ondeviceorientationabsolute" in window)) return;
 
-    if(
-        alpha===null ||
-        alpha===undefined
-    )
-
-        return;
-
-
-    let direcao=360-alpha;
-
-
-    const orientacaoTela=
-        window.screen.orientation
+    let direcao=360-event.alpha;
+    const orientacaoTela=window.screen.orientation
         ? window.screen.orientation.angle
         : 0;
+    direcao=((direcao+orientacaoTela)%360+360)%360;
 
-
-    direcao+=orientacaoTela;
-
-
-    direcao=
-        ((direcao%360)+360)%360;
-
-
-    const diferencaMinima=2;
-
-    const respostaSensor=0.25;
-
-
+    // Circular low-pass filter: avoids jumps when crossing 0/360 degrees.
     if(headingSensor===null){
-
         headingSensor=direcao;
-
     }else{
+        const radAtual=headingSensor*Math.PI/180;
+        const radNovo=direcao*Math.PI/180;
+        const x=Math.cos(radAtual)*0.85+Math.cos(radNovo)*0.15;
+        const y=Math.sin(radAtual)*0.85+Math.sin(radNovo)*0.15;
+        headingSensor=(Math.atan2(y,x)*180/Math.PI+360)%360;
+    }
 
-        let diferenca=
-            direcao-headingSensor;
+    if(marcadorLocalizacao && marcadorLocalizacao._icone){
+        marcadorLocalizacao._icone.style.transform="rotate("+headingSensor+"deg)";
+    }
 
-
-        if(diferenca>180)
-
-            diferenca-=360;
-
-
-        if(diferenca<-180)
-
-            diferenca+=360;
-
-
-        if(
-            Math.abs(diferenca)<
-            diferencaMinima
-        ){
-
-            return;
-
+    // Update map heading at most 8 times per second and only for meaningful changes.
+    if(modoSeguir && map){
+        const agora=Date.now();
+        let delta=ultimoHeadingMapa===null ? 999 : Math.abs(((headingSensor-ultimoHeadingMapa+540)%360)-180);
+        if(agora-ultimoUpdateMapa>=125 && delta>=2){
+            map.setHeading(headingSensor);
+            ultimoHeadingMapa=headingSensor;
+            ultimoUpdateMapa=agora;
         }
-
-
-        headingSensor +=
-            diferenca*respostaSensor;
-
-
-        headingSensor=
-            ((headingSensor%360)+360)%360;
-
-    }
-
-
-    if(
-        marcadorLocalizacao &&
-        marcadorLocalizacao._icone
-    ){
-
-        marcadorLocalizacao._icone.style.transform=
-            "rotate("+headingSensor+"deg)";
-
-    }
-
-
-    if(
-        modoSeguir &&
-        map
-    ){
-
-        map.setHeading(headingSensor);
-
     }
 
 }
@@ -552,7 +505,8 @@ function alternarSeguir(){
 
     solicitarPermissaoSensor();
 
-
+    ultimoHeadingMapa=null;
+    ultimoUpdateMapa=0;
     modoSeguir=true;
 
 
